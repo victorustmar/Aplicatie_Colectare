@@ -1,0 +1,26 @@
+﻿# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Node
+node_modules/
+dist/
+build/
+.next/
+
+# OS / Editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# App artifacts
+files/invoices/
+files/uploads/
+*.pdf
+
+# Env
+.env
+frontend/.env
+backend/.env

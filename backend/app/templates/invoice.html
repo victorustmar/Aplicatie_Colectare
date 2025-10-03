@@ -1,0 +1,114 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <title>Factura {{ invoice.invoice_number }}</title>
+  <style>
+    @font-face {
+    font-family: 'Noto Sans';
+    src: url('fonts/NotoSans-Regular.ttf') format('truetype');
+    font-weight: 400;
+    font-style: normal;
+  }
+  @font-face {
+    font-family: 'Noto Sans';
+    src: url('fonts/NotoSans-Bold.ttf') format('truetype');
+    font-weight: 700;
+    font-style: normal;
+  }
+
+  html, body {
+    font-family: 'Noto Sans', 'DejaVu Sans';
+    font-size: 12px;
+    line-height: 1.4;
+  }
+
+  h2, h3, th, .strong { font-weight: 700; }
+  .wrap { width: 780px; margin: 0 auto; }
+    h1 { font-weight: 700; font-size: 20px; margin: 0 0 8px; }
+    .muted { color: #666; }
+    .row { display: flex; gap: 24px; }
+    .col { flex: 1; }
+    table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+    th, td { border: 1px solid #ddd; padding: 6px 8px; }
+    th { background: #f7f7f7; text-align: left; }
+    .right { text-align: right; }
+    .totals td { border: none; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Factura {{ invoice.invoice_number }}</h1>
+    <div class="muted">Emisă: {{ invoice.issue_date }} • Scadentă: {{ invoice.due_date }}</div>
+
+    <div class="row" style="margin-top:16px">
+      <div class="col">
+        <h3>Furnizor (BASE)</h3>
+        <div><b>{{ base.legal_name }}</b></div>
+        <div>CUI: {{ base.cui }}</div>
+        {% if base.reg_com %}<div>Reg. Com.: {{ base.reg_com }}</div>{% endif %}
+        {% if base.address_line %}<div>Adresă: {{ base.address_line }}</div>{% endif %}
+        {% if base.iban %}<div>IBAN: {{ base.iban }} {% if base.bank_name %} ({{ base.bank_name }}){% endif %}</div>{% endif %}
+        {% if base.email_billing %}<div>Email: {{ base.email_billing }}</div>{% endif %}
+        {% if base.phone_billing %}<div>Telefon: {{ base.phone_billing }}</div>{% endif %}
+      </div>
+      <div class="col">
+        <h3>Client</h3>
+        <div><b>{{ client.legal_name }}</b></div>
+        <div>CUI: {{ client.cui }}</div>
+        {% if client.reg_com %}<div>Reg. Com.: {{ client.reg_com }}</div>{% endif %}
+        {% if client.address_line %}<div>Adresă: {{ client.address_line }}</div>{% endif %}
+        {% if client.email_billing %}<div>Email: {{ client.email_billing }}</div>{% endif %}
+        {% if client.phone_billing %}<div>Telefon: {{ client.phone_billing }}</div>{% endif %}
+      </div>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Descriere</th>
+          <th class="right">Cant.</th>
+          <th>UM</th>
+          <th class="right">Preț unitar</th>
+          <th class="right">Valoare</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for it in items %}
+        <tr>
+          <td>{{ it.line_no }}</td>
+          <td>{{ it.description }}</td>
+          <td class="right">{{ it.qty }}</td>
+          <td>{{ it.unit }}</td>
+          <td class="right">{{ it.unit_price }} {{ invoice.currency }}</td>
+          <td class="right">{{ it.line_total }} {{ invoice.currency }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <table class="totals" style="margin-top: 10px">
+      <tr>
+        <td style="width: 60%"></td>
+        <td class="right" style="width: 20%"><b>Subtotal</b></td>
+        <td class="right" style="width: 20%">{{ invoice.subtotal }} {{ invoice.currency }}</td>
+      </tr>
+      <tr>
+        <td></td>
+        <td class="right"><b>TVA ({{ invoice.vat_rate }}%)</b></td>
+        <td class="right">{{ invoice.vat_amount }} {{ invoice.currency }}</td>
+      </tr>
+      <tr>
+        <td></td>
+        <td class="right"><b>Total</b></td>
+        <td class="right"><b>{{ invoice.total }} {{ invoice.currency }}</b></td>
+      </tr>
+    </table>
+
+    <div class="muted" style="margin-top: 20px">
+      Document generat automat.
+    </div>
+  </div>
+</body>
+</html>
