@@ -46,20 +46,22 @@ export interface InviteOut {
 export type CollectionStatus = "PENDING" | "VALIDATED";
 
 export interface CollectionCreate {
+  // doar bateriile; serverul calculează total_weight & total_cost
   batteries: Record<string, number>;
-  total_weight?: number | null;
-  total_cost?: number | null;
 }
 
 export interface CollectionOut {
   collection_id: string;
   client_company_id: string;
+  client_name?: string; 
   status: CollectionStatus;
   batteries: Record<string, number>;
   total_weight?: number | null;
   total_cost?: number | null;
+  batteries_summary?: string | null; // nou
   created_at: string;
   validated_at?: string | null;
+  batteries_summary?: string;
 }
 
 // Invoices

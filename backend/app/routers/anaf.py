@@ -11,6 +11,7 @@ from app.utils.security import get_current_user_claims
 from collections import defaultdict, deque
 from time import time
 from app.config import settings
+
 _RATE_BUCKETS: dict[str, deque[float]] = defaultdict(deque)
 
 def rate_limit_dependency(request: Request):
@@ -20,12 +21,10 @@ def rate_limit_dependency(request: Request):
     limit = settings.rate_limit_max_hits
 
     dq = _RATE_BUCKETS[ip]
-    # curăță hit-urile vechi
     while dq and dq[0] <= now - window:
         dq.popleft()
 
     if len(dq) >= limit:
-        # 429 Too Many Requests
         raise HTTPException(status_code=429, detail="Prea multe cereri către ANAF. Încearcă mai târziu.")
     dq.append(now)
 
@@ -68,10 +67,12 @@ async def anaf_lookup(
     except Exception as e:
         msg = f"request_failed: {type(e).__name__}"
 
-    # cache / log interogare (use CAST() for jsonb/inet)
+    # MySQL: raw_response is JSON, client_ip is VARCHAR(45); no casts
     db.execute(
-        text("""INSERT INTO anaf_queries(cui, query_date, raw_response, result_code, message, client_ip)
-                 VALUES(:cui, :qd, CAST(:raw AS JSONB), :code, :msg, CAST(:ip AS INET))"""),
+        text("""
+            INSERT INTO anaf_queries (cui, query_date, raw_response, result_code, message, client_ip)
+            VALUES (:cui, :qd, :raw, :code, :msg, :ip)
+        """),
         {
             "cui": cui,
             "qd": today,
@@ -89,13 +90,18 @@ async def anaf_lookup(
                       WHERE cui=:cui ORDER BY created_at DESC LIMIT 1"""),
             {"cui": cui}
         ).scalar()
-        if cached:
-            raw = cached
+        if cached is not None:
+            if isinstance(cached, (dict, list)):
+                raw = cached
+            else:
+                try:
+                    raw = json.loads(cached)
+                except Exception:
+                    raw = None
 
     if raw is None:
         raise HTTPException(status_code=502, detail="ANAF indisponibil și fără cache")
 
-    # parse minimal din structura ANAF (found[0] -> date_generale, etc.)
     summary = AnafSummary(raw=raw)
     try:
         found = (raw or {}).get("found") or []
@@ -103,23 +109,19 @@ async def anaf_lookup(
             f = found[0]
 
             dg = f.get("date_generale") or f.get("dateGenerale") or {}
-            # denumire/adresa/telefon pot avea whitespace \t, \n -> strip()
             summary.denumire = (dg.get("denumire") or "").strip() or None
             summary.cui = str(dg.get("cui")) if dg.get("cui") is not None else (summary.cui or cui)
             summary.address = (dg.get("adresa") or "").strip() or None
             summary.phone = (dg.get("telefon") or dg.get("phone") or "").strip() or None
 
-            # indicator e-Factura (numele cheii variază în practică)
             einv = (dg.get("statusRO_eFactura")
                     or dg.get("statusRo_eFactura")
                     or dg.get("status_ro_eFactura"))
             summary.e_invoice = (bool(einv) if einv is not None else None)
 
-            # inactiv: derivăm din textul "stare_inregistrare"
             sreg = (dg.get("stare_inregistrare") or "").upper()
             summary.inactive = True if ("INACTIV" in sreg or "RADIAT" in sreg) else (False if sreg else None)
 
-            # TVA (opțional; păstrăm dacă îți mai trebuie ulterior)
             tva_scope = f.get("inregistrare_scop_Tva") or f.get("inregistrare_scop_tva") or {}
             if "scpTVA" in tva_scope:
                 summary.vat_payer = bool(tva_scope.get("scpTVA"))
@@ -132,4 +134,3 @@ async def anaf_lookup(
         pass
 
     return summary
-

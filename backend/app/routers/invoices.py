@@ -1,30 +1,30 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from sqlalchemy import text
+from sqlalchemy import text, bindparam
 from app.db import get_db
 from app.utils.security import get_current_user_claims
 from app.schemas.invoices import InvoiceOut, InvoiceItemOut
 from fastapi.responses import FileResponse
 from pathlib import Path
+
 router = APIRouter(prefix="/invoices", tags=["invoices"])
 
 @router.get("", response_model=list[InvoiceOut], response_model_exclude_none=False)
 def list_invoices(claims=Depends(get_current_user_claims), db: Session = Depends(get_db)):
     role = claims.get("role")
-    cid = claims.get("company_id")
+    cid = str(claims.get("company_id"))
     if role not in ("BASE", "CLIENT"):
         raise HTTPException(403, "Rol neacceptat")
 
     where = "base_company_id = :cid" if role == "BASE" else "client_company_id = :cid"
 
-    # 1) Fetch header rows (UUIDs stay as UUID objects)
     rows = db.execute(
         text(f"""
         SELECT
-          invoice_id::text        AS invoice_id,
-          base_company_id::text   AS base_company_id,
-          client_company_id::text AS client_company_id,
-          collection_id::text     AS collection_id,
+          invoice_id,
+          base_company_id,
+          client_company_id,
+          collection_id,
           invoice_number,
           issue_date,
           due_date,
@@ -43,16 +43,13 @@ def list_invoices(claims=Depends(get_current_user_claims), db: Session = Depends
         {"cid": cid}
     ).mappings().all()
 
-    # 2) Build ids for items
     ids = [r["invoice_id"] for r in rows]
     items_map = {}
     if ids:
-        # Cast both UUID columns to text for Pydantic
-        items = db.execute(
-            text("""
+        q = text("""
             SELECT
-              item_id::text    AS item_id,
-              invoice_id::text AS invoice_id,
+              item_id,
+              invoice_id,
               line_no,
               description,
               qty,
@@ -60,43 +57,31 @@ def list_invoices(claims=Depends(get_current_user_claims), db: Session = Depends
               unit_price,
               line_total
             FROM invoice_items
-            WHERE invoice_id::text = ANY(:ids)
+            WHERE invoice_id IN :ids
             ORDER BY invoice_id, line_no
-            """),
-            {"ids": ids}
-        ).mappings().all()
+        """).bindparams(bindparam("ids", expanding=True))
+        items = db.execute(q, {"ids": ids}).mappings().all()
         for it in items:
             items_map.setdefault(it["invoice_id"], []).append(it)
 
-    # 3) Build output, casting header UUIDs to str
     out: list[InvoiceOut] = []
     for r in rows:
         ro = dict(r)
-        ro["invoice_id"] = str(ro["invoice_id"])
-        ro["base_company_id"] = str(ro["base_company_id"])
-        ro["client_company_id"] = str(ro["client_company_id"])
-        if ro.get("collection_id") is not None:
-            ro["collection_id"] = str(ro["collection_id"])
-
-        # ensure pdf_path is passed through (can be None)
-        ro["pdf_path"] = r.get("pdf_path")
-
         out.append(InvoiceOut(
             items=[InvoiceItemOut(**it) for it in items_map.get(ro["invoice_id"], [])],
             **ro
         ))
     return out
 
-
 @router.get("/{invoice_id}", response_model=InvoiceOut, response_model_exclude_none=False)
 def invoice_detail(invoice_id: str, claims=Depends(get_current_user_claims), db: Session = Depends(get_db)):
     row = db.execute(
         text("""
         SELECT
-          invoice_id::text        AS invoice_id,
-          base_company_id::text   AS base_company_id,
-          client_company_id::text AS client_company_id,
-          collection_id::text     AS collection_id,
+          invoice_id,
+          base_company_id,
+          client_company_id,
+          collection_id,
           invoice_number,
           issue_date,
           due_date,
@@ -125,8 +110,8 @@ def invoice_detail(invoice_id: str, claims=Depends(get_current_user_claims), db:
     items = db.execute(
         text("""
         SELECT
-          item_id::text    AS item_id,
-          invoice_id::text AS invoice_id,
+          item_id,
+          invoice_id,
           line_no,
           description,
           qty,
@@ -142,16 +127,14 @@ def invoice_detail(invoice_id: str, claims=Depends(get_current_user_claims), db:
 
     return InvoiceOut(items=[InvoiceItemOut(**it) for it in items], **row)
 
-from pathlib import Path
-
 @router.get("/{invoice_id}/pdf")
 def download_pdf(invoice_id: str, claims=Depends(get_current_user_claims), db: Session = Depends(get_db)):
     row = db.execute(
         text("""
         SELECT
-          invoice_id::text AS invoice_id,
-          base_company_id::text AS base_company_id,
-          client_company_id::text AS client_company_id,
+          invoice_id,
+          base_company_id,
+          client_company_id,
           pdf_path
         FROM invoices WHERE invoice_id = :id
         """),

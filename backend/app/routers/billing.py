@@ -21,17 +21,21 @@ def get_profile(claims = Depends(get_current_user_claims), db: Session = Depends
 
     row = db.execute(
         text("""
-        SELECT c.company_id::text AS company_id, 
-               COALESCE(p.legal_name, c.name) AS legal_name,
-               COALESCE(p.cui, c.cui) AS cui,
-               p.reg_com, p.address_line, p.city, p.county, p.postal_code, COALESCE(p.country,'RO') AS country,
-               p.bank_name, p.iban, p.email_billing, p.phone_billing,
-               p.vat_payer, p.vat_cash, p.e_invoice, p.updated_from_anaf_at, COALESCE(p.source,'ANAF') AS source
+        SELECT
+          c.company_id,                                   -- stored as CHAR(36) in MySQL schema
+          COALESCE(p.legal_name, c.name) AS legal_name,
+          COALESCE(p.cui, c.cui) AS cui,
+          p.reg_com, p.address_line, p.city, p.county, p.postal_code,
+          COALESCE(p.country,'RO') AS country,
+          p.bank_name, p.iban, p.email_billing, p.phone_billing,
+          p.vat_payer, p.vat_cash, p.e_invoice,
+          CAST(p.updated_from_anaf_at AS CHAR) AS updated_from_anaf_at,   -- <- make it a string for Pydantic
+          COALESCE(p.source,'ANAF') AS source
         FROM companies c
         LEFT JOIN company_billing_profiles p ON p.company_id = c.company_id
         WHERE c.company_id = :cid
         """),
-        {"cid": company_id}
+        {"cid": str(company_id)}
     ).mappings().first()
 
     if not row:
@@ -47,15 +51,14 @@ def update_profile(payload: BillingProfileUpdate,
     if not company_id:
         raise HTTPException(403, "Utilizatorul nu este asociat unei companii")
 
-    # extrage name/cui din companies ca fallback
     comp = db.execute(
         text("SELECT name, cui FROM companies WHERE company_id=:cid"),
-        {"cid": company_id}
+        {"cid": str(company_id)}
     ).mappings().first()
     if not comp:
         raise HTTPException(404, "Compania nu există")
 
-    # upsert cu source='USER'
+    # MySQL upsert
     db.execute(
         text("""
         INSERT INTO company_billing_profiles(
@@ -66,33 +69,33 @@ def update_profile(payload: BillingProfileUpdate,
             :cid, COALESCE(:legal_name, :fallback_name), :fallback_cui, :reg_com, :address_line, :city, :county, :postal_code,
             COALESCE(:country, 'RO'), :bank_name, :iban, :email_billing, :phone_billing, 'USER'
         )
-        ON CONFLICT (company_id) DO UPDATE SET
-            legal_name = COALESCE(EXCLUDED.legal_name, company_billing_profiles.legal_name),
-            reg_com = COALESCE(EXCLUDED.reg_com, company_billing_profiles.reg_com),
-            address_line = COALESCE(EXCLUDED.address_line, company_billing_profiles.address_line),
-            city = COALESCE(EXCLUDED.city, company_billing_profiles.city),
-            county = COALESCE(EXCLUDED.county, company_billing_profiles.county),
-            postal_code = COALESCE(EXCLUDED.postal_code, company_billing_profiles.postal_code),
-            country = COALESCE(EXCLUDED.country, company_billing_profiles.country),
-            bank_name = COALESCE(EXCLUDED.bank_name, company_billing_profiles.bank_name),
-            iban = COALESCE(EXCLUDED.iban, company_billing_profiles.iban),
-            email_billing = COALESCE(EXCLUDED.email_billing, company_billing_profiles.email_billing),
-            phone_billing = COALESCE(EXCLUDED.phone_billing, company_billing_profiles.phone_billing),
-            source = 'USER'
+        ON DUPLICATE KEY UPDATE
+            legal_name   = COALESCE(VALUES(legal_name),   company_billing_profiles.legal_name),
+            reg_com      = COALESCE(VALUES(reg_com),      company_billing_profiles.reg_com),
+            address_line = COALESCE(VALUES(address_line), company_billing_profiles.address_line),
+            city         = COALESCE(VALUES(city),         company_billing_profiles.city),
+            county       = COALESCE(VALUES(county),       company_billing_profiles.county),
+            postal_code  = COALESCE(VALUES(postal_code),  company_billing_profiles.postal_code),
+            country      = COALESCE(VALUES(country),      company_billing_profiles.country),
+            bank_name    = COALESCE(VALUES(bank_name),    company_billing_profiles.bank_name),
+            iban         = COALESCE(VALUES(iban),         company_billing_profiles.iban),
+            email_billing= COALESCE(VALUES(email_billing),company_billing_profiles.email_billing),
+            phone_billing= COALESCE(VALUES(phone_billing),company_billing_profiles.phone_billing),
+            source='USER'
         """),
         {
-            "cid": company_id,
+            "cid": str(company_id),
             "fallback_name": comp["name"],
             "fallback_cui": comp["cui"],
             **payload.model_dump()
         }
     )
 
-    # audit
     db.execute(
         text("""INSERT INTO audit_logs(actor_user_id, actor_company_id, action, details)
-                VALUES (:uid, :cid, 'BILLING_PROFILE_UPDATED', CAST(:d AS JSONB))"""),
-        {"uid": claims.get("sub"), "cid": company_id, "d": json.dumps(payload.model_dump(exclude_none=True))}
+                VALUES (:uid, :cid, 'BILLING_PROFILE_UPDATED', :d)"""),
+        {"uid": str(claims.get("sub")), "cid": str(company_id),
+         "d": json.dumps(payload.model_dump(exclude_none=True))}
     )
     db.commit()
 
@@ -104,7 +107,7 @@ def update_profile(payload: BillingProfileUpdate,
 def get_settings(claims = Depends(get_current_user_claims), db: Session = Depends(get_db)):
     if claims.get("role") != "BASE":
         raise HTTPException(403, "Doar contul BASE are setări de facturare")
-    base_company_id = claims.get("company_id")
+    base_company_id = str(claims.get("company_id"))
 
     row = db.execute(
         text("""
@@ -115,15 +118,14 @@ def get_settings(claims = Depends(get_current_user_claims), db: Session = Depend
     ).mappings().first()
 
     if not row:
-        # creează default dacă nu există
         db.execute(
             text("""INSERT INTO company_invoice_settings(base_company_id)
-                    VALUES (:cid) ON CONFLICT DO NOTHING"""),
+                    VALUES (:cid)"""),
             {"cid": base_company_id}
         )
         db.commit()
         row = db.execute(
-            text("""SELECT base_company_id::text AS base_company_id, series_code, next_number, year_reset, due_days, default_vat_rate
+            text("""SELECT base_company_id, series_code, next_number, year_reset, due_days, default_vat_rate
                     FROM company_invoice_settings WHERE base_company_id=:cid"""),
             {"cid": base_company_id}
         ).mappings().first()
@@ -136,21 +138,17 @@ def update_settings(payload: InvoiceSettingsUpdate,
                     db: Session = Depends(get_db)):
     if claims.get("role") != "BASE":
         raise HTTPException(403, "Doar contul BASE poate modifica setările de facturare")
-    cid = claims.get("company_id")
+    cid = str(claims.get("company_id"))
 
     db.execute(
-        text("""
-        INSERT INTO company_invoice_settings(base_company_id)
-        VALUES(:cid)
-        ON CONFLICT (base_company_id) DO NOTHING
-        """),
+        text("""INSERT INTO company_invoice_settings(base_company_id)
+                VALUES(:cid)
+                ON DUPLICATE KEY UPDATE base_company_id=base_company_id"""),
         {"cid": cid}
     )
 
-    # app/routers/billing.py  (în funcția update_settings)
     payload_dict = payload.model_dump()
 
-    # dacă vine next_number, nu permite scăderea lui
     if payload.next_number is not None:
         cur_next = db.execute(
             text("SELECT next_number FROM company_invoice_settings WHERE base_company_id=:cid"),
@@ -169,7 +167,7 @@ def update_settings(payload: InvoiceSettingsUpdate,
                year_reset        = COALESCE(:year_reset, year_reset),
                due_days          = COALESCE(:due_days, due_days),
                default_vat_rate  = COALESCE(:default_vat_rate, default_vat_rate),
-               next_number       = COALESCE(:next_number, next_number)         -- <— AICI
+               next_number       = COALESCE(:next_number, next_number)
          WHERE base_company_id = :cid
         """),
         {"cid": cid, **payload_dict}
@@ -177,8 +175,8 @@ def update_settings(payload: InvoiceSettingsUpdate,
 
     db.execute(
         text("""INSERT INTO audit_logs(actor_user_id, actor_company_id, action, details)
-                VALUES (:uid, :cid, 'INVOICE_SETTINGS_UPDATED', CAST(:d AS JSONB))"""),
-        {"uid": claims.get("sub"), "cid": cid, "d": json.dumps(payload.model_dump(exclude_none=True))}
+                VALUES (:uid, :cid, 'INVOICE_SETTINGS_UPDATED', :d)"""),
+        {"uid": str(claims.get("sub")), "cid": cid, "d": json.dumps(payload.model_dump(exclude_none=True))}
     )
     db.commit()
 

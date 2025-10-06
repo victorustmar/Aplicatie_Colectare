@@ -1,6 +1,7 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../auth';
+import { Link } from 'react-router-dom';
 
 type LinkDef = { to: string; label: string };
 

@@ -12,7 +12,12 @@ import type {
 } from '../types/api';
 
 const BASE_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
-
+type AcceptInvitePayload = {
+  token: string;
+  password: string;
+  full_name: string;
+  phone?: string;
+};
 export function getToken(): string | null {
   return localStorage.getItem('access_token');
 }
@@ -76,10 +81,11 @@ export const api = {
 
   listCompanies: () => request<CollaborationOut[]>('/companies'),
 
-  acceptInvite: (token: string, password: string, full_name: string) =>
+// src/api/client.ts
+acceptInvite: (payload: AcceptInvitePayload) =>
     request<LoginOut>('/invites/accept', {
       method: 'POST',
-      body: JSON.stringify({ token, password, full_name }),
+      body: JSON.stringify(payload),
     }),
 
   // COLLECTIONS
@@ -90,6 +96,9 @@ export const api = {
     }),
 
   listCollections: () => request<CollectionOut[]>('/collections'),
+
+    getCollection: (id: string) =>
+    request<CollectionOut>(`/collections/${id}`),
 
   validateCollection: (collectionId: string) =>
     request<CollectionOut>(`/collections/${collectionId}/validate`, { method: 'POST' }),
@@ -139,5 +148,6 @@ export const api = {
     request<InvoiceSettings>('/billing/settings', {
       method: 'PUT',
       body: JSON.stringify(p),
-    }),
+    })
+
 };

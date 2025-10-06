@@ -143,7 +143,16 @@ export default function Dashboard() {
           <div style={{ marginTop: 10 }}>
             <small>{inviteMsg} &nbsp;
               {inviteMsg.includes('http') && (
-                <button onClick={() => copyText(inviteMsg)} style={{ padding:'4px 8px' }}>Copiază</button>
+                <button
+  onClick={() => {
+    const url = (inviteMsg?.match(/https?:\/\/\S+/) || [])[0];
+    if (url) copyText(url);
+  }}
+  style={{ padding:'4px 8px' }}
+>
+  Copiază
+</button>
+
               )}
             </small>
           </div>

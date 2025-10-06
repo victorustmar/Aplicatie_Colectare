@@ -5,8 +5,8 @@ import { useAuth } from '../auth';
 export default function Login() {
   const nav = useNavigate();
   const { login } = useAuth();
-  const [email, setEmail] = useState('admin@example.com');
-  const [password, setPassword] = useState('AdminPass!23');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -47,10 +47,6 @@ export default function Login() {
           {loading ? 'Se conectează…' : 'Login'}
         </button>
       </form>
-
-      <div style={{ marginTop: 16, fontSize: 12, color:'#666' }}>
-        Teste rapide: <code>admin@example.com / AdminPass!23</code> sau <code>base@example.com / BasePass!23</code>
-      </div>
     </div>
   );
 }

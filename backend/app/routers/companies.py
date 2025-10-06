@@ -2,13 +2,13 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 from datetime import date
-import httpx, secrets, json
+import httpx, secrets, json, uuid
 
 from app.db import get_db
 from app.utils.security import get_current_user_claims
 from app.schemas.companies import InviteIn, InviteOut, CompanyMini, CollaborationOut
 from app.config import settings
-from .anaf import _sanitize_cui  # reutilizăm helperul
+from .anaf import _sanitize_cui
 from app.utils.billing import upsert_billing_profile_from_anaf
 
 router = APIRouter(prefix="/companies", tags=["companies"])
@@ -21,10 +21,9 @@ async def invite_company(payload: InviteIn, request: Request,
                          claims = Depends(get_current_user_claims),
                          db: Session = Depends(get_db)):
 
-    # doar BASE poate invita
     if claims.get("role") != "BASE":
         raise HTTPException(status_code=403, detail="Doar utilizatorii BASE pot invita")
-    base_cid = claims.get("company_id")
+    base_cid = str(claims.get("company_id"))
     if not base_cid:
         raise HTTPException(status_code=400, detail="Lipsește compania BASE a utilizatorului")
 
@@ -32,7 +31,6 @@ async def invite_company(payload: InviteIn, request: Request,
     if not (cui.isdigit() and 2 <= len(cui) <= 10):
         raise HTTPException(status_code=400, detail="CUI invalid")
 
-    # Lookup ANAF (ca să populăm denumirea)
     today = date.today().isoformat()
     den = None
     try:
@@ -49,65 +47,57 @@ async def invite_company(payload: InviteIn, request: Request,
     except Exception:
         pass
 
-    # upsert companie CLIENT
-    row = db.execute(
+    # MySQL upsert
+    db.execute(
         text("""
-        WITH up AS (
-          INSERT INTO companies(company_type, name, cui, email_contact)
-          VALUES ('CLIENT', COALESCE(:den,'N/A'), :cui, :email)
-          ON CONFLICT (cui) DO UPDATE
-             SET name = COALESCE(EXCLUDED.name, companies.name),
-                 email_contact = COALESCE(EXCLUDED.email_contact, companies.email_contact)
-          RETURNING company_id, cui, name, company_code
-        )
-        SELECT company_id, cui, name, company_code FROM up
-        UNION ALL
-        SELECT company_id, cui, name, company_code FROM companies WHERE cui=:cui
-        LIMIT 1
+        INSERT INTO companies(company_type, name, cui, email_contact)
+        VALUES ('CLIENT', COALESCE(:den,'N/A'), :cui, :email)
+        ON DUPLICATE KEY UPDATE
+          name = COALESCE(VALUES(name), companies.name),
+          email_contact = COALESCE(VALUES(email_contact), companies.email_contact)
         """),
         {"den": den, "cui": cui, "email": str(payload.email)}
+    )
+
+    row = db.execute(
+        text("SELECT company_id, cui, name, company_code FROM companies WHERE cui=:cui"),
+        {"cui": cui}
     ).mappings().first()
+    client_company_id = str(row["company_id"])
 
-    client_company_id = row["company_id"]
-
-    # Pre-populează profilul de facturare din ultimul cache ANAF (dacă există)
     raw_cached = db.execute(
         text("SELECT raw_response FROM anaf_queries WHERE cui=:cui ORDER BY created_at DESC LIMIT 1"),
         {"cui": cui}
     ).scalar()
-
     if raw_cached:
         upsert_billing_profile_from_anaf(db, client_company_id, raw_cached)
-    # nu dăm commit aici; commit-ul de la final acoperă toate scrierile
 
-    # collaborations -> PENDING
+    # collaborations -> PENDING (unique key on base_company_id+client_company_id)
     db.execute(
         text("""
         INSERT INTO collaborations(base_company_id, client_company_id, status)
         VALUES(:b,:c,'PENDING')
-        ON CONFLICT (base_company_id, client_company_id)
-        DO UPDATE SET status='PENDING'
+        ON DUPLICATE KEY UPDATE status='PENDING'
         """),
         {"b": base_cid, "c": client_company_id}
     )
 
-    # creează invitație
+    # invitation
     token = _token()
-    inv_id = db.execute(
+    inv_id = str(uuid.uuid4())
+    db.execute(
         text("""
-        INSERT INTO company_invitations(base_company_id, client_company_id, cui, invited_email, token)
-        VALUES(:b,:c,:cui,:email,:tok)
-        RETURNING invitation_id
+        INSERT INTO company_invitations(invitation_id, base_company_id, client_company_id, cui, invited_email, token)
+        VALUES(:id,:b,:c,:cui,:email,:tok)
         """),
-        {"b": base_cid, "c": client_company_id, "cui": cui, "email": str(payload.email), "tok": token}
-    ).scalar()
+        {"id": inv_id, "b": base_cid, "c": client_company_id, "cui": cui, "email": str(payload.email), "tok": token}
+    )
 
-    # audit
     db.execute(
         text("""INSERT INTO audit_logs(actor_user_id, actor_company_id, action, details)
-                VALUES(:uid, :cid, 'INVITE_SENT', CAST(:d AS JSONB))"""),
-        {"uid": claims.get("sub"), "cid": base_cid,
-         "d": json.dumps({"invitation_id": str(inv_id), "client_company_id": str(client_company_id),
+                VALUES(:uid, :cid, 'INVITE_SENT', :d)"""),
+        {"uid": str(claims.get("sub")), "cid": base_cid,
+         "d": json.dumps({"invitation_id": inv_id, "client_company_id": client_company_id,
                           "cui": cui, "email": str(payload.email)})}
     )
 
@@ -118,7 +108,7 @@ async def invite_company(payload: InviteIn, request: Request,
         "token": token,
         "invite_url": invite_url,
         "company": {
-            "company_id": str(client_company_id),
+            "company_id": client_company_id,
             "cui": row["cui"],
             "name": row["name"],
             "company_code": row["company_code"],
@@ -129,7 +119,7 @@ async def invite_company(payload: InviteIn, request: Request,
 def list_companies(claims = Depends(get_current_user_claims), db: Session = Depends(get_db)):
     if claims.get("role") != "BASE":
         raise HTTPException(status_code=403, detail="Doar BASE poate lista companiile colaboratoare")
-    base_cid = claims.get("company_id")
+    base_cid = str(claims.get("company_id"))
     rows = db.execute(
         text("""
         SELECT c.company_id AS client_company_id, c.cui, c.name, c.company_code, co.status

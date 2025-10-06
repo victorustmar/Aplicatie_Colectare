@@ -1,5 +1,5 @@
 ﻿import uuid, datetime as dt
-import jwt
+from jose import jwt, JWTError 
 from typing import Any, Dict
 
 from fastapi import HTTPException, status, Request, Depends

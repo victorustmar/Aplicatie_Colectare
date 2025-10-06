@@ -3,6 +3,7 @@ import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-
 import { RequireAuth } from './components/RequireAuth';
 import { useAuth } from './auth';
 
+
 import Login from './pages/Login';
 import InviteAccept from './pages/InviteAcceptPage';
 
@@ -15,7 +16,7 @@ import BaseCollections from './pages/BaseCollections';
 import BaseInvoices from './pages/BaseInvoices';
 import BillingProfilePage from './pages/BillingProfile';
 import BillingSettingsPage from './pages/BillingSettings';
-
+import BaseCollectionReview from "./pages/BaseCollectionReview";
 import Layout from './components/Layout';
 
 export default function App() {
@@ -48,6 +49,7 @@ export default function App() {
           <Route path="/invoices" element={<BaseInvoices />} />
           <Route path="/billing/profile" element={<BillingProfilePage />} />
           <Route path="/billing/settings" element={<BillingSettingsPage />} />
+          <Route path="/collections/:id/review" element={<BaseCollectionReview />} />
         </Route>
       </Route>
 

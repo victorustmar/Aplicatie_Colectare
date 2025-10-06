@@ -1,27 +1,42 @@
 import React, { useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { api, setToken } from '../api/client';
+import { useParams } from 'react-router-dom';
+import { api, setToken, clearToken } from '../api/client';  // <-- add clearToken
 import { useAuth } from '../auth';
 
-function InviteAccept() {
+export default function InviteAcceptPage() {
   const { token } = useParams<{ token: string }>();
-  const nav = useNavigate();
-  const { refreshMe } = useAuth();
-
+  const { refreshMe } = useAuth();                           // <-- use auth refresh
   const [fullName, setFullName] = useState('');
+  const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
-  const submit = async (e: React.FormEvent) => {
+  const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!token) { setErr('Lipsește token-ul'); return; }
-    setErr(null); setLoading(true);
+    setErr(null);
+    if (!token) { setErr('Token lipsă'); return; }
+    if (!phone.trim()) { setErr('Te rugăm să introduci numărul de telefon.'); return; }
+
+    setLoading(true);
     try {
-      const res = await api.acceptInvite(token, password, fullName || 'Utilizator');
+      // 1) drop any existing BASE token
+      clearToken();
+
+      // 2) accept invite (API MUST return { access_token, user })
+      const res = await api.acceptInvite({
+        token,
+        password,
+        full_name: fullName,
+        phone: phone.trim(),
+      });
+
+      // 3) install new CLIENT token and refresh identity
       setToken(res.access_token);
       await refreshMe();
-      nav('/client', { replace: true });
+
+      // 4) hard redirect so every provider/axios sees the new token
+      window.location.replace('/'); // or '/client' if you have a client home
     } catch (e: any) {
       setErr(e.message || 'Eroare la acceptarea invitației');
     } finally {
@@ -30,27 +45,29 @@ function InviteAccept() {
   };
 
   return (
-    <div style={{ maxWidth: 420, margin:'80px auto', padding: 24, border:'1px solid #ddd', borderRadius:8 }}>
+    <div style={{maxWidth: 460, margin: '40px auto'}}>
       <h2>Acceptă invitația</h2>
-      <p style={{color:'#666', marginTop:8}}>Setează-ți numele și parola pentru a-ți activa contul.</p>
-      <form onSubmit={submit}>
-        <div style={{ marginTop: 12 }}>
-          <label>Nume complet</label>
-          <input value={fullName} onChange={e=>setFullName(e.target.value)}
-                 style={{ width:'100%', padding:8, marginTop:4 }}/>
-        </div>
-        <div style={{ marginTop: 12 }}>
-          <label>Parolă</label>
-          <input type="password" value={password} onChange={e=>setPassword(e.target.value)} required
-                 style={{ width:'100%', padding:8, marginTop:4 }}/>
-        </div>
-        {err && <div style={{ color:'crimson', marginTop: 10 }}>{err}</div>}
-        <button disabled={loading} type="submit" style={{ marginTop:16, padding:'10px 14px' }}>
-          {loading ? 'Se activează…' : 'Activează contul'}
+      <form onSubmit={onSubmit} style={{display:'grid', gap:12, marginTop:16}}>
+        <label>
+          Nume complet
+          </label>
+          <input value={fullName} onChange={e=>setFullName(e.target.value)} required />
+        
+        <label>
+          Număr de telefon
+         </label>
+          <input value={phone} onChange={e=>setPhone(e.target.value)} type="tel" required />
+        
+        <label>
+          Parolă
+           </label>
+           <input value={password} onChange={e=>setPassword(e.target.value)} type="password" required />
+       
+        {err && <div style={{color:'crimson'}}>{err}</div>}
+        <button disabled={loading} type="submit">
+          {loading ? 'Se procesează…' : 'Creează cont'}
         </button>
       </form>
     </div>
   );
 }
-
-export default InviteAccept;
