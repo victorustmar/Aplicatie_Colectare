@@ -46,10 +46,17 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
         content={"detail": "A apărut o eroare internă. Încercați din nou."},
     )
 
+origins = [
+    "http://localhost:54322",
+    "http://127.0.0.1:54322",
+    "http://192.168.8.33:54322",
+    "http://86.120.164.67:54322",   # <= add this
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origins,
-    allow_credentials=True,
+    allow_origins=origins,     # must be explicit when allow_credentials=True
+    allow_credentials=True,    # set True only if you use cookies
     allow_methods=["*"],
     allow_headers=["*"],
 )

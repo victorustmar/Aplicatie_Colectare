@@ -2,9 +2,12 @@
 import { api } from '../api/client';
 import type { AnafSummary, CollaborationOut } from '../types/api';
 import { useAuth } from '../auth';
-
+const PUBLIC_APP = (import.meta.env.VITE_PUBLIC_APP_ORIGIN || window.location.origin).replace(/\/$/, '');
 export default function Dashboard() {
   const { logout } = useAuth();
+
+  
+
 
   // CUI Lookup (existent)
   const [cui, setCui] = useState('');
@@ -16,6 +19,7 @@ export default function Dashboard() {
   // Invite
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteMsg, setInviteMsg] = useState<string | null>(null);
+    const [inviteUrl, setInviteUrl] = useState<string | null>(null); // 👈 păstrăm linkul curat
   const [inviteLoading, setInviteLoading] = useState(false);
 
   // Collaborations list
@@ -39,11 +43,26 @@ export default function Dashboard() {
   const submitInvite = async (e: React.FormEvent) => {
     e.preventDefault();
     setInviteMsg(null);
+    setInviteUrl(null);
     setInviteLoading(true);
     try {
       const cuiValue = data?.cui || cui;
       const res = await api.inviteCompany(cuiValue || '', inviteEmail);
-      setInviteMsg(`Invitație creată. Link: ${res.invite_url}`);
+
+      // 👇 extragem tokenul din răspuns
+      const token =
+        (res as any).invite_code
+        ?? (res.invite_url?.split('/invite/')[1] ?? '')
+        ?? '';
+
+      if (!token) throw new Error('Nu s-a putut obține tokenul de invitație');
+
+      // 👇 construim linkul public
+      const url = `${PUBLIC_APP}/invite/${token}`;
+
+      setInviteMsg('Invitație creată.');
+      setInviteUrl(url);
+
       // reîncarcă lista colaborări
       await loadCollabs();
     } catch (e: any) {
@@ -139,24 +158,20 @@ export default function Dashboard() {
             {inviteLoading ? 'Se trimite…' : 'Trimite invitație'}
           </button>
         </form>
-        {inviteMsg && (
-          <div style={{ marginTop: 10 }}>
-            <small>{inviteMsg} &nbsp;
-              {inviteMsg.includes('http') && (
-                <button
-  onClick={() => {
-    const url = (inviteMsg?.match(/https?:\/\/\S+/) || [])[0];
-    if (url) copyText(url);
-  }}
-  style={{ padding:'4px 8px' }}
->
-  Copiază
-</button>
 
+        {(inviteMsg || inviteUrl) && (
+          <div style={{ marginTop: 10 }}>
+            <small>
+              {inviteMsg} {inviteUrl && (
+                <>
+                  Link: <a href={inviteUrl} target="_blank" rel="noreferrer">{inviteUrl}</a>&nbsp;
+                  <button onClick={() => copyText(inviteUrl)} style={{ padding:'4px 8px' }}>Copiază</button>
+                </>
               )}
             </small>
           </div>
         )}
+
         <small style={{color:'#666'}}>În producție vei trimite un email cu linkul de invitație.</small>
       </section>
 
