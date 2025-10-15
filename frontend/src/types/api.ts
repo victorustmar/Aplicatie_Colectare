@@ -1,4 +1,8 @@
-export type Role = 'ADMIN' | 'BASE' | 'CLIENT';
+
+export type PartnerRole = 'CLIENT' | 'RECYCLER' | 'PRODUCER' | 'COLLECTOR'| 'PRODUCER_2';
+// src/types/api.ts
+export type Role = 'ADMIN' | 'BASE' | 'PRODUCER' | 'COLLECTOR' | 'RECYCLER';
+
 
 export interface User {
   user_id: string;
@@ -42,37 +46,51 @@ export interface InviteOut {
   };
 }
 
-// Collections
-export type CollectionStatus = "PENDING" | "VALIDATED";
+/* =========================
+   Collections
+   ========================= */
+
+export type CollectionStatus = 'PENDING' | 'VALIDATED';
+
 
 export interface CollectionCreate {
-  // doar bateriile; serverul calculează total_weight & total_cost
-  batteries: Record<string, number>;
+  /** Doar bateriile; serverul sumează greutatea și costul total */
+  batteries: Record<string, BatteryLine>;
 }
 
 export interface CollectionOut {
   collection_id: string;
   client_company_id: string;
-  client_name?: string; 
+  client_name?: string;
   status: CollectionStatus;
-  batteries: Record<string, number>;
-  total_weight?: number | null;
-  total_cost?: number | null;
-  batteries_summary?: string | null; // nou
+
+  /** Harta tip -> { pcs, weight_kg, price_ron } */
+  batteries: Record<string, BatteryLine>;
+
+  /** Sume totale (kg și lei) – pot veni ca string din DECIMAL */
+  total_weight?: number | string | null;
+  total_cost?: number | string | null;
+
+  /** Rezumat prietenos pentru listări */
+  batteries_summary?: string | null;
+
   created_at: string;
   validated_at?: string | null;
-  batteries_summary?: string;
 }
 
-// Invoices
+/* =========================
+   Invoices
+   ========================= */
+
 export interface InvoiceItemOut {
   item_id: string;
   line_no: number;
   description: string;
-  qty: number;
+  /** Poate veni ca string din DECIMAL */
+  qty: number | string;
   unit: string;
-  unit_price: number;
-  line_total: number;
+  unit_price: number | string;
+  line_total: number | string;
 }
 
 export interface InvoiceOut {
@@ -84,17 +102,20 @@ export interface InvoiceOut {
   issue_date: string; // yyyy-mm-dd
   due_date: string;   // yyyy-mm-dd
   currency: string;
-  vat_rate: number;
-  subtotal: number;
-  vat_amount: number;
-  total: number;
+  vat_rate: number | string;
+  subtotal: number | string;
+  vat_amount: number | string;
+  total: number | string;
   status: string;
   created_at: string;
   items: InvoiceItemOut[];
   pdf_path?: string | null;
 }
 
-// Billing
+/* =========================
+   Billing
+   ========================= */
+
 export interface BillingProfile {
   company_id: string;
   legal_name: string;
@@ -147,8 +168,10 @@ export interface InvoiceSettingsUpdate {
   next_number?: number;
 }
 
-// Companies / Collaborations
-// --- Collaborations (BASE <-> CLIENT) ---
+/* =========================
+   Companies / Collaborations
+   ========================= */
+
 export type CollaborationStatus = 'PENDING' | 'ACTIVE' | 'REJECTED';
 
 export interface CollaborationOut {
@@ -158,6 +181,63 @@ export interface CollaborationOut {
   status: CollaborationStatus;
   company_code?: string | null;
 }
+
+export interface InviteCreateIn {
+  email: string;
+  target_role: PartnerRole;
+  cui?: string;
+  company_name?: string;
+}
+
+// src/types/api.ts
+// ⬇️ Add these (or update if they already exist)
+
+
+
+export type RecyclingCreate = {
+  batteries: Record<string, BatteryLine>;
+};
+
+export type RecyclingOut = {
+  recycling_id: string;
+  recycler_company_id: string;
+  status: 'PENDING' | 'VALIDATED';
+  batteries: Record<string, BatteryLine | number>; // compatibility with older rows
+  total_weight?: number | string | null;
+  total_cost?: number | string | null;
+  created_at: string;
+  validated_at?: string | null;
+  batteries_summary?: string | null; // server-side pretty summary (optional)
+};
+
+// --- extinde rolurile ---
+//export type Role = 'ADMIN' | 'BASE' | 'CLIENT' | 'RECYCLER' | 'PRODUCER';
+
+// --- tipuri reutilizate ---
+export type BatteryLine = { pcs?: number; weight_kg?: number; price_ron?: number };
+
+// =========================
+// Packages (PRODUCER ↔ BASE)
+// =========================
+export type PackageStatus = 'PENDING' | 'VALIDATED';
+
+export interface PackageOut {
+  package_id: string;
+  producer_company_id: string;
+  producer_name?: string | null;
+
+  status: PackageStatus;
+
+  batteries: Record<string, BatteryLine>;
+  batteries_summary?: string | null;
+
+  total_weight?: number | string | null;
+  total_cost?: number | string | null;
+
+  created_at: string;
+  validated_at?: string | null;
+}
+
 
 
 

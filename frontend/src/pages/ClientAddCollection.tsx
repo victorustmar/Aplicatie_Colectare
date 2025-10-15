@@ -1,217 +1,24 @@
-// import React, { useMemo, useState } from "react";
-// import { useNavigate } from "react-router-dom";
-// import { api } from "../api/client";
-// import type { CollectionCreate } from "../types/api";
-// import {
-//   PORTABLE_KEYS, KG_KEYS, LABELS,
-//   PORTABLE_RATES, PORTABLE_WEIGHTS_KG, KG_RATES,
-// } from "../features/rates";
-
-// type NumOrEmpty = number | "";
-// type BatteriesState = Record<string, NumOrEmpty>;
-// const round2 = (n: number) => Math.round(n * 100) / 100;
-// const num = (v: NumOrEmpty) => (v === "" ? 0 : v); // normalize for math
-
-// export default function ClientAddCollection() {
-//   const nav = useNavigate();
-
-//   // start empty (no 0s shown)
-//   const [bats, setBats] = useState<BatteriesState>(() => {
-//     const init: BatteriesState = {};
-//     [...PORTABLE_KEYS, ...KG_KEYS].forEach(k => (init[k] = ""));
-//     return init;
-//   });
-
-//   const [saving, setSaving] = useState(false);
-//   const [err, setErr] = useState<string | null>(null);
-//   const [ok, setOk] = useState<string | null>(null);
-
-//   // live preview
-//   const { subtotal, totalWeight } = useMemo(() => {
-//     let sub = 0;
-//     let kg  = 0;
-
-//     // portable (buc)
-//     for (const k of PORTABLE_KEYS) {
-//       const qty = num(bats[k]);
-//       if (qty > 0) {
-//         sub += qty * PORTABLE_RATES[k];
-//         kg  += qty * PORTABLE_WEIGHTS_KG[k];
-//       }
-//     }
-//     // auto/industrial (kg)
-//     for (const k of KG_KEYS) {
-//       const w = num(bats[k]);
-//       if (w > 0) {
-//         sub += w * KG_RATES[k];
-//         kg  += w;
-//       }
-//     }
-//     return { subtotal: round2(sub), totalWeight: round2(kg) };
-//   }, [bats]);
-
-//   const canSubmit = useMemo(
-//     () => Object.values(bats).some(v => Number(v) > 0),
-//     [bats]
-//   );
-
-//   const onChangeInt = (key: string, val: string) => {
-//     const s = val.trim();
-//     if (s === "") { setBats(p => ({ ...p, [key]: "" })); return; }
-//     const n = Number(s.replace(",", "."));
-//     setBats(p => ({ ...p, [key]: !isFinite(n) || n < 0 ? "" : Math.floor(n) }));
-//   };
-
-//   const onChangeFloat = (key: string, val: string) => {
-//     const s = val.trim();
-//     if (s === "") { setBats(p => ({ ...p, [key]: "" })); return; }
-//     const n = Number(s.replace(",", "."));
-//     setBats(p => ({ ...p, [key]: !isFinite(n) || n < 0 ? "" : n }));
-//   };
-
-//   const submit = async (e: React.FormEvent) => {
-//     e.preventDefault();
-//     setErr(null); setOk(null);
-//     if (!canSubmit) { setErr("Completează cel puțin o cantitate > 0."); return; }
-
-//     setSaving(true);
-//     try {
-//       const payload: CollectionCreate = {
-//         batteries: Object.fromEntries(
-//           Object.entries(bats).filter(([, v]) => Number(v) > 0)
-//             .map(([k, v]) => [k, Number(v)])
-//         ),
-//       };
-//       await api.createCollection(payload);
-//       setOk("Colectarea a fost creată.");
-
-//       // reset to empty (not zeros)
-//       const reset: BatteriesState = {};
-//       [...PORTABLE_KEYS, ...KG_KEYS].forEach(k => (reset[k] = ""));
-//       setBats(reset);
-
-//       // nav("/client/collections"); // dacă vrei redirect
-//     } catch (e: any) {
-//       setErr(e?.message || "Eroare la creare colectare");
-//     } finally {
-//       setSaving(false);
-//     }
-//   };
-
-//   return (
-//     <div style={{ maxWidth: 980, margin: "24px auto", padding: 16 }}>
-//       <h2>Adaugă colectare</h2>
-//       <form onSubmit={submit} style={{ display: "grid", gap: 18, marginTop: 12 }}>
-//         {/* Portable */}
-//         <section>
-//           <h3>Baterii portabile (buc)</h3>
-//           <table style={{ width: "100%", borderCollapse: "collapse" }}>
-//             <thead>
-//               <tr>
-//                 <th style={{ textAlign: "left" }}>Tip</th>
-//                 <th>Tarif (lei/buc)</th>
-//                 <th>Greutate (kg/buc)</th>
-//                 <th style={{ width: 160 }}>Cantitate</th>
-//               </tr>
-//             </thead>
-//             <tbody>
-//               {PORTABLE_KEYS.map(k => (
-//                 <tr key={k}>
-//                   <td>{LABELS[k]}</td>
-//                   <td style={{ textAlign: "center" }}>{PORTABLE_RATES[k]}</td>
-//                   <td style={{ textAlign: "center" }}>{PORTABLE_WEIGHTS_KG[k]}</td>
-//                   <td style={{ textAlign: "center" }}>
-//                     <input
-//                       type="number"
-//                       min={0}
-//                       step={1}
-//                       placeholder="0"
-//                       value={bats[k] === "" ? "" : bats[k]}
-//                       onChange={e => onChangeInt(k, e.target.value)}
-//                       style={{ width: 120 }}
-//                     />
-//                   </td>
-//                 </tr>
-//               ))}
-//             </tbody>
-//           </table>
-//         </section>
-
-//         {/* Auto & Industrial */}
-//         <section>
-//           <h3>Baterii auto și industriale (kg)</h3>
-//           <table style={{ width: "100%", borderCollapse: "collapse" }}>
-//             <thead>
-//               <tr>
-//                 <th style={{ textAlign: "left" }}>Tip</th>
-//                 <th>Tarif (lei/kg)</th>
-//                 <th style={{ width: 160 }}>Cantitate (kg)</th>
-//               </tr>
-//             </thead>
-//             <tbody>
-//               {KG_KEYS.map(k => (
-//                 <tr key={k}>
-//                   <td>{LABELS[k]}</td>
-//                   <td style={{ textAlign: "center" }}>{KG_RATES[k]}</td>
-//                   <td style={{ textAlign: "center" }}>
-//                     <input
-//                       type="number"
-//                       min={0}
-//                       step={0.01}
-//                       placeholder="0"
-//                       value={bats[k] === "" ? "" : bats[k]}
-//                       onChange={e => onChangeFloat(k, e.target.value)}
-//                       style={{ width: 120 }}
-//                     />
-//                   </td>
-//                 </tr>
-//               ))}
-//             </tbody>
-//           </table>
-//         </section>
-
-//         <div style={{ display: "flex", gap: 24, alignItems: "center" }}>
-//           <div><strong>Greutate totală estimată:</strong> {totalWeight} kg</div>
-//           <div><strong>Subtotal estimat:</strong> {subtotal} lei</div>
-//         </div>
-
-//         {err && <div style={{ color: "crimson" }}>{err}</div>}
-//         {ok && <div style={{ color: "seagreen" }}>{ok}</div>}
-
-//         <div>
-//           <button disabled={!canSubmit || saving} type="submit">
-//             {saving ? "Se salvează…" : "Creează"}
-//           </button>
-//         </div>
-//       </form>
-//     </div>
-//   );
-// }
-
 import React, { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api/client";
 import type { CollectionCreate } from "../types/api";
-import {
-  PORTABLE_KEYS, KG_KEYS, LABELS,
-  PORTABLE_RATES, PORTABLE_WEIGHTS_KG, KG_RATES,
-} from "../features/rates";
+import { BATTERY_LABELS, BATTERY_SECTIONS, BATTERY_KEYS_ORDER } from "../lib/batteries";
 
 type NumOrEmpty = number | "";
-type BatteriesState = Record<string, NumOrEmpty>;
+type BatteryLineState = { pcs: NumOrEmpty; weight_kg: NumOrEmpty; price_ron: NumOrEmpty };
+type BatteriesState = Record<string, BatteryLineState>;
 
-const round2 = (n: number) => Math.round(n * 100) / 100;
-const num = (v: NumOrEmpty) => (v === "" ? 0 : v);
-const fmt = (n: number) =>
-  n === 0 ? "" : n.toLocaleString("ro-RO", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const nf2 = new Intl.NumberFormat("ro-RO", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const toNum = (v: NumOrEmpty) => (v === "" ? 0 : Number(v));
+const clean = (s: string) => s.trim().replace(",", ".");
 
 export default function ClientAddCollection() {
   const nav = useNavigate();
 
-  // inputs start empty (no zeros shown)
+  // stare inițială: toate câmpurile goale (nu afișăm zerouri)
   const [bats, setBats] = useState<BatteriesState>(() => {
     const init: BatteriesState = {};
-    [...PORTABLE_KEYS, ...KG_KEYS].forEach(k => (init[k] = ""));
+    for (const k of BATTERY_KEYS_ORDER) init[k] = { pcs: "", weight_kg: "", price_ron: "" };
     return init;
   });
 
@@ -219,77 +26,66 @@ export default function ClientAddCollection() {
   const [err, setErr] = useState<string | null>(null);
   const [ok, setOk] = useState<string | null>(null);
 
-  // line totals + category subtotals + overall totals
-  const calc = useMemo(() => {
-    let totalWeight = 0;
-    let portableSubtotal = 0;
-    let kgSubtotal = 0;
-    const lineTotals: Record<string, number> = {};
-
-    for (const k of PORTABLE_KEYS) {
-      const qty = num(bats[k]);
-      const value = qty * PORTABLE_RATES[k];
-      const w = qty * PORTABLE_WEIGHTS_KG[k];
-      lineTotals[k] = round2(value);
-      totalWeight += w;
-      portableSubtotal += value;
+  // totaluri introduse
+  const totals = useMemo(() => {
+    let totalPcs = 0;
+    let totalKg = 0;
+    let totalLei = 0;
+    for (const k of Object.keys(bats)) {
+      totalPcs += toNum(bats[k].pcs);
+      totalKg += toNum(bats[k].weight_kg);
+      totalLei += toNum(bats[k].price_ron);
     }
-    for (const k of KG_KEYS) {
-      const w = num(bats[k]);
-      const value = w * KG_RATES[k];
-      lineTotals[k] = round2(value);
-      totalWeight += w;
-      kgSubtotal += value;
-    }
-    portableSubtotal = round2(portableSubtotal);
-    kgSubtotal = round2(kgSubtotal);
-    const subtotal = round2(portableSubtotal + kgSubtotal);
-    totalWeight = round2(totalWeight);
-
-    return { lineTotals, portableSubtotal, kgSubtotal, subtotal, totalWeight };
+    return { totalPcs, totalKg, totalLei };
   }, [bats]);
 
-  const canSubmit = useMemo(
-    () => Object.values(bats).some(v => Number(v) > 0),
-    [bats]
-  );
+  const canSubmit = useMemo(() => {
+    return Object.values(bats).some((ln) => toNum(ln.pcs) > 0 || toNum(ln.weight_kg) > 0 || toNum(ln.price_ron) > 0);
+  }, [bats]);
 
   const onChangeInt = (key: string, val: string) => {
-    const s = val.trim();
-    if (s === "") { setBats(p => ({ ...p, [key]: "" })); return; }
-    const n = Number(s.replace(",", "."));
-    setBats(p => ({ ...p, [key]: !isFinite(n) || n < 0 ? "" : Math.floor(n) }));
+    const s = clean(val);
+    if (s === "") return setBats((p) => ({ ...p, [key]: { ...p[key], pcs: "" } }));
+    const n = Number(s);
+    setBats((p) => ({ ...p, [key]: { ...p[key], pcs: !isFinite(n) || n < 0 ? "" : Math.floor(n) } }));
   };
 
-  const onChangeFloat = (key: string, val: string) => {
-    const s = val.trim();
-    if (s === "") { setBats(p => ({ ...p, [key]: "" })); return; }
-    const n = Number(s.replace(",", "."));
-    setBats(p => ({ ...p, [key]: !isFinite(n) || n < 0 ? "" : n }));
+  const onChangeFloat = (key: string, field: "weight_kg" | "price_ron", val: string) => {
+    const s = clean(val);
+    if (s === "") return setBats((p) => ({ ...p, [key]: { ...p[key], [field]: "" } }));
+    const n = Number(s);
+    setBats((p) => ({ ...p, [key]: { ...p[key], [field]: !isFinite(n) || n < 0 ? "" : n } }));
   };
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setErr(null); setOk(null);
-    if (!canSubmit) { setErr("Completează cel puțin o cantitate > 0."); return; }
-
+    setErr(null);
+    setOk(null);
+    if (!canSubmit) {
+      setErr("Completează cel puțin un rând cu valori > 0.");
+      return;
+    }
     setSaving(true);
     try {
-      const payload: CollectionCreate = {
-        batteries: Object.fromEntries(
-          Object.entries(bats)
-            .filter(([, v]) => Number(v) > 0)
-            .map(([k, v]) => [k, Number(v)])
-        ),
-      };
+      const batteries: CollectionCreate["batteries"] = {};
+      for (const [k, ln] of Object.entries(bats)) {
+        const pcs = toNum(ln.pcs);
+        const weight_kg = toNum(ln.weight_kg);
+        const price_ron = toNum(ln.price_ron);
+        if (pcs > 0 || weight_kg > 0 || price_ron > 0) {
+          batteries[k] = { pcs, weight_kg, price_ron };
+        }
+      }
+      const payload: CollectionCreate = { batteries };
       await api.createCollection(payload);
       setOk("Colectarea a fost creată.");
 
-      // reset to empty (not zeros)
+      // reset formular
       const reset: BatteriesState = {};
-      [...PORTABLE_KEYS, ...KG_KEYS].forEach(k => (reset[k] = ""));
+      for (const k of BATTERY_KEYS_ORDER) reset[k] = { pcs: "", weight_kg: "", price_ron: "" };
       setBats(reset);
 
+      // poți redirecționa dacă vrei:
       // nav("/client/collections");
     } catch (e: any) {
       setErr(e?.message || "Eroare la creare colectare");
@@ -301,97 +97,78 @@ export default function ClientAddCollection() {
   return (
     <div style={{ maxWidth: 980, margin: "24px auto", padding: 16 }}>
       <h2>Adaugă colectare</h2>
+
       <form onSubmit={submit} style={{ display: "grid", gap: 18, marginTop: 12 }}>
-        {/* Portable */}
-        <section>
-          <h3>Baterii portabile (buc)</h3>
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
-            <thead>
-              <tr>
-                <th style={{ textAlign: "left" }}>Tip</th>
-                <th>Tarif (lei/buc)</th>
-                <th>Greutate (kg/buc)</th>
-                <th style={{ width: 160 }}>Cantitate</th>
-                <th style={{ width: 140 }}>Valoare (lei)</th>
-              </tr>
-            </thead>
-            <tbody>
-              {PORTABLE_KEYS.map(k => (
-                <tr key={k}>
-                  <td>{LABELS[k]}</td>
-                  <td style={{ textAlign: "center" }}>{PORTABLE_RATES[k]}</td>
-                  <td style={{ textAlign: "center" }}>{PORTABLE_WEIGHTS_KG[k]}</td>
-                  <td style={{ textAlign: "center" }}>
-                    <input
-                      type="number"
-                      min={0}
-                      step={1}
-                      placeholder="0"
-                      value={bats[k] === "" ? "" : bats[k]}
-                      onChange={e => onChangeInt(k, e.target.value)}
-                      style={{ width: 120 }}
-                    />
-                  </td>
-                  <td style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
-                    {fmt(calc.lineTotals[k] || 0)}
-                  </td>
+        {BATTERY_SECTIONS.map((section) => (
+          <section key={section.id}>
+            <h3>{section.title}</h3>
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead>
+                <tr>
+                  <th style={{ textAlign: "left", borderBottom: "1px solid #eee", padding: 6 }}>Tip</th>
+                  <th style={{ textAlign: "center", borderBottom: "1px solid #eee", padding: 6 }}>Nr. bucăți</th>
+                  <th style={{ textAlign: "center", borderBottom: "1px solid #eee", padding: 6 }}>Total greutate (kg)</th>
+                  <th style={{ textAlign: "right", borderBottom: "1px solid #eee", padding: 6 }}>Valoare (lei)</th>
                 </tr>
-              ))}
-              {/* Subtotal portabile */}
-              <tr style={{ background: "#fafafa", fontWeight: 600 }}>
-                <td colSpan={4} style={{ textAlign: "right", paddingRight: 8 }}>Subtotal portabile</td>
-                <td style={{ textAlign: "right" }}>{fmt(calc.portableSubtotal)} lei</td>
-              </tr>
-            </tbody>
-          </table>
-        </section>
+              </thead>
+              <tbody>
+                {section.keys.map((k) => {
+                  const ln = bats[k];
+                  return (
+                    <tr key={k}>
+                      <td style={{ padding: 6 }}>{BATTERY_LABELS[k] || k}</td>
+                      <td style={{ textAlign: "center", padding: 6 }}>
+                        <input
+                          type="number"
+                          min={0}
+                          step={1}
+                          placeholder="0"
+                          value={ln.pcs === "" ? "" : ln.pcs}
+                          onChange={(e) => onChangeInt(k, e.target.value)}
+                          style={{ width: 120 }}
+                        />
+                      </td>
+                      <td style={{ textAlign: "center", padding: 6 }}>
+                        <input
+                          type="number"
+                          min={0}
+                          step={0.01}
+                          placeholder="0"
+                          value={ln.weight_kg === "" ? "" : ln.weight_kg}
+                          onChange={(e) => onChangeFloat(k, "weight_kg", e.target.value)}
+                          style={{ width: 140 }}
+                        />
+                      </td>
+                      <td style={{ textAlign: "right", padding: 6 }}>
+                        <input
+                          type="number"
+                          min={0}
+                          step={0.01}
+                          placeholder="0"
+                          value={ln.price_ron === "" ? "" : ln.price_ron}
+                          onChange={(e) => onChangeFloat(k, "price_ron", e.target.value)}
+                          style={{ width: 140, textAlign: "right" }}
+                        />
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </section>
+        ))}
 
-        {/* Auto & Industrial */}
-        <section>
-          <h3>Baterii auto și industriale (kg)</h3>
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
-            <thead>
-              <tr>
-                <th style={{ textAlign: "left" }}>Tip</th>
-                <th>Tarif (lei/kg)</th>
-                <th style={{ width: 160 }}>Cantitate (kg)</th>
-                <th style={{ width: 140 }}>Valoare (lei)</th>
-              </tr>
-            </thead>
-            <tbody>
-              {KG_KEYS.map(k => (
-                <tr key={k}>
-                  <td>{LABELS[k]}</td>
-                  <td style={{ textAlign: "center" }}>{KG_RATES[k]}</td>
-                  <td style={{ textAlign: "center" }}>
-                    <input
-                      type="number"
-                      min={0}
-                      step={0.01}
-                      placeholder="0"
-                      value={bats[k] === "" ? "" : bats[k]}
-                      onChange={e => onChangeFloat(k, e.target.value)}
-                      style={{ width: 120 }}
-                    />
-                  </td>
-                  <td style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
-                    {fmt(calc.lineTotals[k] || 0)}
-                  </td>
-                </tr>
-              ))}
-              {/* Subtotal auto/industriale */}
-              <tr style={{ background: "#fafafa", fontWeight: 600 }}>
-                <td colSpan={3} style={{ textAlign: "right", paddingRight: 8 }}>Subtotal auto & industriale</td>
-                <td style={{ textAlign: "right" }}>{fmt(calc.kgSubtotal)} lei</td>
-              </tr>
-            </tbody>
-          </table>
-        </section>
-
-        {/* Totals */}
+        {/* Totaluri introduse (doar informativ) */}
         <div style={{ display: "flex", gap: 24, alignItems: "center" }}>
-          <div><strong>Greutate totală estimată:</strong> {fmt(calc.totalWeight)} kg</div>
-          <div><strong>Subtotal estimat (total):</strong> {fmt(calc.subtotal)} lei</div>
+          <div>
+            <strong>Total piese:</strong> {totals.totalPcs}
+          </div>
+          <div>
+            <strong>Greutate totală:</strong> {nf2.format(totals.totalKg)} kg
+          </div>
+          <div>
+            <strong>Valoare totală:</strong> {nf2.format(totals.totalLei)} lei
+          </div>
         </div>
 
         {err && <div style={{ color: "crimson" }}>{err}</div>}

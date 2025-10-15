@@ -1,18 +1,25 @@
-﻿from pydantic import BaseModel, EmailStr
-from typing import Optional
-from uuid import UUID
+﻿# app/schemas/auth.py
+from typing import Optional, Literal
+from pydantic import BaseModel, EmailStr
+
+Role = Literal["ADMIN", "BASE", "PRODUCER", "COLLECTOR", "RECYCLER"]
+
 class LoginIn(BaseModel):
     email: EmailStr
     password: str
 
 class UserOut(BaseModel):
-    user_id: UUID
-    role: str
+    user_id: str
+    role: Role
     company_id: Optional[str] = None
-    full_name: str
+    full_name: Optional[str] = None
     company_name: Optional[str] = None
+
+# Back-compat with any places importing `User`
+class User(UserOut):
+    pass
 
 class LoginOut(BaseModel):
     access_token: str
-    token_type: str = "bearer"
+    token_type: Literal["bearer"] = "bearer"
     user: UserOut

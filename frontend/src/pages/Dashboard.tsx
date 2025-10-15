@@ -1,13 +1,12 @@
 ﻿import React, { useEffect, useState } from 'react';
 import { api } from '../api/client';
-import type { AnafSummary, CollaborationOut } from '../types/api';
+import type { AnafSummary, CollaborationOut, PartnerRole } from '../types/api';
 import { useAuth } from '../auth';
+
 const PUBLIC_APP = (import.meta.env.VITE_PUBLIC_APP_ORIGIN || window.location.origin).replace(/\/$/, '');
+
 export default function Dashboard() {
   const { logout } = useAuth();
-
-  
-
 
   // CUI Lookup (existent)
   const [cui, setCui] = useState('');
@@ -16,17 +15,21 @@ export default function Dashboard() {
   const [data, setData] = useState<AnafSummary | null>(null);
   const [showRaw, setShowRaw] = useState(false);
 
-  // Invite
+  // Invite (ACUM cu rol + denumire)
   const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteRole, setInviteRole] = useState<PartnerRole>('CLIENT');
+  const [inviteCompanyName, setInviteCompanyName] = useState('');
   const [inviteMsg, setInviteMsg] = useState<string | null>(null);
-    const [inviteUrl, setInviteUrl] = useState<string | null>(null); // 👈 păstrăm linkul curat
+  const [inviteUrl, setInviteUrl] = useState<string | null>(null);
   const [inviteLoading, setInviteLoading] = useState(false);
 
-  // Collaborations list
+  // Collaborations list (clients)
   const [collabs, setCollabs] = useState<CollaborationOut[]>([]);
   const [collabsLoading, setCollabsLoading] = useState(false);
   const [collabsErr, setCollabsErr] = useState<string | null>(null);
 
+
+  
   const submitLookup = async (e: React.FormEvent) => {
     e.preventDefault();
     setErr(null); setData(null); setInviteMsg(null); setLoading(true);
@@ -40,37 +43,78 @@ export default function Dashboard() {
     }
   };
 
-  const submitInvite = async (e: React.FormEvent) => {
+/*   const submitInvite = async (e: React.FormEvent) => {
     e.preventDefault();
     setInviteMsg(null);
     setInviteUrl(null);
     setInviteLoading(true);
     try {
-      const cuiValue = data?.cui || cui;
-      const res = await api.inviteCompany(cuiValue || '', inviteEmail);
+      const cuiValue = (data?.cui || cui || '').trim() || undefined;
+      const nameValue = (data?.denumire || inviteCompanyName || '').trim() || undefined;
 
-      // 👇 extragem tokenul din răspuns
+      const res = await api.invitePartner({
+        email: inviteEmail,
+        target_role: inviteRole,    // 'CLIENT' | 'RECYCLER' | 'PRODUCER'
+        cui: cuiValue,
+        company_name: nameValue,
+        // expires_in_days: 14 // optional – poți adăuga un control în UI dacă dorești
+      });
+
+      // extragem tokenul din răspuns
       const token =
-        (res as any).invite_code
-        ?? (res.invite_url?.split('/invite/')[1] ?? '')
-        ?? '';
+        (res as any).invite_code ??
+        (res.invite_url?.split('/invite/')[1] ?? '') ??
+        '';
 
       if (!token) throw new Error('Nu s-a putut obține tokenul de invitație');
 
-      // 👇 construim linkul public
       const url = `${PUBLIC_APP}/invite/${token}`;
-
       setInviteMsg('Invitație creată.');
       setInviteUrl(url);
 
-      // reîncarcă lista colaborări
+      // reîncarcă lista colaborări (doar clienți)
       await loadCollabs();
     } catch (e: any) {
       setInviteMsg(e.message || 'Eroare la trimiterea invitației');
     } finally {
       setInviteLoading(false);
     }
-  };
+  }; */
+  const submitInvite = async (e: React.FormEvent) => {
+  e.preventDefault();
+  setInviteMsg(null);
+  setInviteUrl(null);
+  setInviteLoading(true);
+  try {
+    const cuiValue = (data?.cui || cui || '').trim() || undefined;
+    const companyName = (data?.denumire || '').trim() || undefined;
+
+    const res = await api.invitePartner({
+      email: inviteEmail,
+      target_role: inviteRole,
+      cui: cuiValue,
+      company_name: companyName,
+    });
+
+    const token =
+      (res as any).token ||
+      (res as any).invite_code ||
+      (res.invite_url?.split('/invite/')[1] ?? '');
+
+    if (!token) throw new Error('Nu s-a putut obține tokenul de invitație');
+
+    const url = `${PUBLIC_APP}/invite/${token}`;
+    setInviteMsg('Invitație creată.');
+    setInviteUrl(url);
+
+    await loadCollabs();
+  } catch (e: any) {
+    setInviteMsg(e.message || 'Eroare la trimiterea invitației');
+  } finally {
+    setInviteLoading(false);
+  }
+};
+
 
   const loadCollabs = async () => {
     setCollabsErr(null); setCollabsLoading(true);
@@ -136,16 +180,40 @@ export default function Dashboard() {
         )}
       </section>
 
-      {/* Trimite invitație */}
+      {/* Trimite invitație (cu rol) */}
       <section style={{ marginTop: 16, border:'1px solid #eee', borderRadius:8, padding:12 }}>
-        <h3>Trimite invitație către firmă</h3>
-        <form onSubmit={submitInvite} style={{ display:'grid', gridTemplateColumns:'2fr 3fr auto', gap: 8, alignItems:'center', marginTop: 12 }}>
+        <h3>Trimite invitație</h3>
+        <form
+          onSubmit={submitInvite}
+          style={{
+            display:'grid',
+            gridTemplateColumns:'1fr 1fr 2fr auto',
+            gap: 8,
+            alignItems:'center',
+            marginTop: 12
+          }}
+        >
+          <select
+            value={inviteRole}
+            onChange={(e) => setInviteRole(e.target.value as PartnerRole)}
+            style={{ padding: 10, border:'1px solid #ddd', borderRadius:6 }}
+            aria-label="Tip invitat"
+            title="Tip invitat"
+          >
+            <option value="CLIENT">Client</option>
+            <option value="RECYCLER">Reciclator</option>
+            <option value="PRODUCER">Producător</option>
+            <option value="PRODUCER_2">Producător (doi)</option>
+
+          </select>
+
           <input
-            placeholder="CUI (dacă e gol, se folosește cel de mai sus)"
+            placeholder="CUI (opțional – dacă lipsește, se creează companie nouă)"
             value={data?.cui ?? cui}
             onChange={e=>setCui(e.target.value)}
             style={{ padding: 10, border:'1px solid #ddd', borderRadius:6 }}
           />
+
           <input
             placeholder="Email destinatar"
             value={inviteEmail}
@@ -154,15 +222,19 @@ export default function Dashboard() {
             required
             style={{ padding: 10, border:'1px solid #ddd', borderRadius:6 }}
           />
+
           <button disabled={inviteLoading} type="submit" style={{ padding: '10px 14px' }}>
             {inviteLoading ? 'Se trimite…' : 'Trimite invitație'}
           </button>
         </form>
 
+        
+
         {(inviteMsg || inviteUrl) && (
           <div style={{ marginTop: 10 }}>
             <small>
-              {inviteMsg} {inviteUrl && (
+              {inviteMsg}{' '}
+              {inviteUrl && (
                 <>
                   Link: <a href={inviteUrl} target="_blank" rel="noreferrer">{inviteUrl}</a>&nbsp;
                   <button onClick={() => copyText(inviteUrl)} style={{ padding:'4px 8px' }}>Copiază</button>
@@ -175,9 +247,9 @@ export default function Dashboard() {
         <small style={{color:'#666'}}>În producție vei trimite un email cu linkul de invitație.</small>
       </section>
 
-      {/* Lista colaborări */}
+      {/* Lista colaborări (doar clienți; pentru recyclers/producers poți adăuga pagini similare) */}
       <section style={{ marginTop: 16, border:'1px solid #eee', borderRadius:8, padding:12 }}>
-        <h3>Colaborări</h3>
+        <h3>Colaborări (clienți)</h3>
         {collabsLoading && <div>Se încarcă…</div>}
         {collabsErr && <div style={{color:'crimson'}}>{collabsErr}</div>}
         {!collabsLoading && !collabsErr && (

@@ -65,6 +65,11 @@ app.add_middleware(
 def healthz():
     return {"status": "ok"}
 
+from app.routers import recyclings as recyclings_router
+app.include_router(recyclings_router.router)
+from app.routers import packages as packages_router
+app.include_router(packages_router.router)
+
 app.include_router(auth_router.router)
 app.include_router(anaf_router.router)
 app.include_router(companies_router.router)

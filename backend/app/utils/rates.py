@@ -1,74 +1,58 @@
 # app/utils/rates.py
+# Single source pentru denumirile tipurilor de baterii și ordinea lor.
+# Nu mai conține tarife.
 
-from typing import Final
+from typing import Dict, List, Tuple
 
-PORTABLE_KEYS: Final[list[str]] = [
-    "portable_pastila",
-    "portable_0_50",
-    "portable_51_150",
-    "portable_151_250",
-    "portable_251_500",
-    "portable_501_750",
-    "portable_751_1000",
-    "portable_1000_plus",
+# Cheie -> etichetă în română (conform șablonului din tabel)
+LABELS: Dict[str, str] = {
+    # Baterii portabile – categoria 1
+    "1a": "Alcaline",
+    "1b": "Litiu",
+    "1c": "Zinc carbon",
+    "1d": "Zinc aer",
+    "1e": "Oxid de mercur (HgO)",
+    "1f": "Oxid de argint (Ag₂O)",
+    "1g": "Ansamblu de baterii",
+    "1h": "Altele",
+
+    # Baterii portabile – categoria 2
+    "2a": "Nichel Cadmiu (NiCd)",
+    "2b": "Plumb",
+    "2c": "Nichel metal hidrură (NiMH)",
+    "2d": "Litiu ion",
+    "2e": "Litiu polimer",
+    "2f": "Altele",
+
+    # Baterii auto – categoria 3
+    "3a": "Plumb acid",
+    "3b": "Nichel cadmiu (NiCd)",
+    "3c": "Altele",
+
+    # Baterii industriale – categoria 4
+    "4a": "Plumb acid",
+    "4b": "Nichel cadmiu (NiCd)",
+    "4c": "Altele",
+}
+
+# Grupare pentru UI/factură (titlu + ordinea rândurilor)
+SECTIONS: List[Tuple[str, str, List[str]]] = [
+    (
+        "PORTABLE_12",
+        "Baterii portabile (categoriile 1 și 2)",
+        ["1a","1b","1c","1d","1e","1f","1g","1h","2a","2b","2c","2d","2e","2f"],
+    ),
+    (
+        "AUTO_3",
+        "Baterii auto (categoria 3)",
+        ["3a","3b","3c"],
+    ),
+    (
+        "INDUSTRIAL_4",
+        "Baterii industriale (categoria 4)",
+        ["4a","4b","4c"],
+    ),
 ]
 
-KG_KEYS: Final[list[str]] = [
-    "auto_3a",
-    "auto_3b",
-    "auto_3c",
-    "industrial_4a",
-    "industrial_4b",
-    "industrial_4c",
-]
-
-LABELS: Final[dict[str, str]] = {
-    "portable_pastila": "Pastilă",
-    "portable_0_50": "0–50 g",
-    "portable_51_150": "51–150 g",
-    "portable_151_250": "151–250 g",
-    "portable_251_500": "251–500 g",
-    "portable_501_750": "501–750 g",
-    "portable_751_1000": "751–1000 g",
-    "portable_1000_plus": "> 1000 g",
-    "auto_3a": "Auto 3a",
-    "auto_3b": "Auto 3b",
-    "auto_3c": "Auto 3c",
-    "industrial_4a": "Industrial 4a",
-    "industrial_4b": "Industrial 4b",
-    "industrial_4c": "Industrial 4c",
-}
-
-# RON per piece (portables)
-PORTABLE_RATES: Final[dict[str, float]] = {
-    "portable_pastila": 0.01,
-    "portable_0_50": 0.04,
-    "portable_51_150": 0.11,
-    "portable_151_250": 0.38,
-    "portable_251_500": 0.80,
-    "portable_501_750": 0.98,
-    "portable_751_1000": 1.20,
-    "portable_1000_plus": 1.38,
-}
-
-# Estimated kg per piece (portables)
-PORTABLE_WEIGHTS_KG: Final[dict[str, float]] = {
-    "portable_pastila": 0.010,
-    "portable_0_50": 0.050,
-    "portable_51_150": 0.150,
-    "portable_151_250": 0.250,
-    "portable_251_500": 0.500,
-    "portable_501_750": 0.750,
-    "portable_751_1000": 1.000,
-    "portable_1000_plus": 1.000,
-}
-
-# RON per kg (auto/industrial)
-KG_RATES: Final[dict[str, float]] = {
-    "auto_3a": 0.35,
-    "auto_3b": 1.38,
-    "auto_3c": 1.38,
-    "industrial_4a": 0.35,
-    "industrial_4b": 1.38,
-    "industrial_4c": 1.38,
-}
+# Listă liniară utilă dacă vrei doar ordinea cheilor
+ALL_KEYS: List[str] = [k for _, _, keys in SECTIONS for k in keys]
